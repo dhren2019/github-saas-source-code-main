@@ -1,21 +1,33 @@
-import { processMeeting } from "@/lib/assembly";
-import { getEmbeddings } from "@/lib/gemini";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { db } from "@/server/db";
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import pLimit from "p-limit";
-import { z } from "zod";
 
 export const maxDuration = 300; // 5 minutes
-
-const bodyParser = z.object({
-    audio_url: z.string(),
-    projectId: z.string(),
-    meetingId: z.string()
-})
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+    // Skip completely during build
+    if (process.env.SKIP_ENV_VALIDATION === 'true') {
+        return new NextResponse(JSON.stringify({ error: 'Build mode - process-meeting disabled' }), { 
+            status: 503,
+            headers: { 'Content-Type': 'application/json' }
+        });
+    }
+    
+    // Lazy import to avoid build-time issues
+    const { processMeeting } = await import("@/lib/assembly");
+    const { getEmbeddings } = await import("@/lib/gemini");
+    const { RecursiveCharacterTextSplitter } = await import("langchain/text_splitter");
+    const { db } = await import("@/server/db");
+    const { auth } = await import("@clerk/nextjs/server");
+    const pLimit = (await import("p-limit")).default;
+    const { z } = await import("zod");
+
+    const bodyParser = z.object({
+        audio_url: z.string(),
+        projectId: z.string(),
+        meetingId: z.string()
+    })
+
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

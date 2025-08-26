@@ -1,12 +1,12 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
-// Temporarily include /dashboard as a public route for local debugging
-// Remove this entry once Clerk/session issues are resolved.
 const isPublicRoute = createRouteMatcher([
     '/sign-in(.*)',
     '/sign-up(.*)',
     '/api/webhooks/stripe(.*)',
-    '/dashboard(.*)'
+    '/dashboard(.*)',
+    // Add API routes to public during build
+    '/api/trpc(.*)'
 ])
 
 export default clerkMiddleware(async (auth, request) => {

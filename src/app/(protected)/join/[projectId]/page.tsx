@@ -1,10 +1,18 @@
-import { db } from '@/server/db';
-import { auth, clerkClient } from '@clerk/nextjs/server';
-import { notFound, redirect } from 'next/navigation';
+export const dynamic = 'force-dynamic';
 
 type Props = { params: Promise<{ projectId: string }> }
 
 const JoinPage = async ({ params }: Props) => {
+    // Skip during build
+    if (process.env.SKIP_ENV_VALIDATION === 'true') {
+        return <div>Build mode - join disabled</div>;
+    }
+    
+    // Lazy imports to avoid build issues
+    const { db } = await import('@/server/db');
+    const { auth, clerkClient } = await import('@clerk/nextjs/server');
+    const { notFound, redirect } = await import('next/navigation');
+    
     const { projectId } = await params
     const { userId } = await auth();
     const dbUser = await db.user.findUnique({

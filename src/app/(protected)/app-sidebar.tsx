@@ -14,7 +14,6 @@ import {
     SidebarTrigger,
     useSidebar,
 } from "@/components/ui/sidebar"
-import { UserButton } from "@clerk/nextjs"
 
 import { Bot, Calendar, ChevronDown, CreditCard, File, FolderTree, Home, Inbox, LayoutDashboard, Plus, Presentation, Search, Settings } from "lucide-react"
 import Logo from "./logo"

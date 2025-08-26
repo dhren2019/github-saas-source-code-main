@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "next build",
+    "build:vercel": "SKIP_ENV_VALIDATION=true next build",
     "db:generate": "prisma migrate dev",
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
@@ -22,6 +23,7 @@
     "@langchain/community": "^0.3.9",
     "@langchain/core": "^0.3.15",
     "@prisma/client": "^5.14.0",
+    "autoprefixer": "^10.4.14",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-alert-dialog": "^1.1.2",
     "@radix-ui/react-aspect-ratio": "^1.1.0",
@@ -78,6 +80,7 @@
     "octokit": "^4.0.2",
     "openai": "^4.68.4",
     "p-limit": "^6.1.0",
+    "postcss": "^8.4.39",
     "prisma": "^5.14.0",
     "react": "19.0.0-rc-02c0e824-20241028",
     "react-circular-progressbar": "^2.1.0",
@@ -112,10 +115,8 @@
     "@typescript-eslint/parser": "^8.1.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "15.0.2",
-    "postcss": "^8.4.39",
     "prettier": "^3.3.2",
     "prettier-plugin-tailwindcss": "^0.6.5",
-    "tailwindcss": "^3.4.3",
     "typescript": "^5.5.3"
   },
   "ct3aMetadata": {

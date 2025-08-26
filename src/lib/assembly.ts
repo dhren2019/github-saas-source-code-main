@@ -1,8 +1,8 @@
 import { AssemblyAI } from 'assemblyai';
 import { readFileSync, writeFileSync } from 'fs'
-const client = new AssemblyAI({
+const client = process.env.ASSEMBLYAI_API_KEY ? new AssemblyAI({
     apiKey: process.env.ASSEMBLYAI_API_KEY!,
-});
+}) : null;
 
 const FILE_URL =
     'https://assembly.ai/sports_injuries.mp3';
@@ -17,6 +17,10 @@ function msToTime(ms: number): string {
 
 
 export const processMeeting = async (audio_url: string) => {
+    if (!client) {
+        throw new Error('AssemblyAI API key not configured');
+    }
+    
     const transcript = await client.transcripts.transcribe({
         audio: audio_url,
         auto_chapters: true

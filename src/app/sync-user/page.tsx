@@ -1,9 +1,18 @@
-import { db } from '@/server/db'
-import { auth, clerkClient } from '@clerk/nextjs/server'
-import { notFound, redirect } from 'next/navigation'
 import React from 'react'
 
+export const dynamic = 'force-dynamic';
+
 const SyncUser = async () => {
+    // Skip during build
+    if (process.env.SKIP_ENV_VALIDATION === 'true') {
+        return <div>Build mode - sync disabled</div>;
+    }
+    
+    // Lazy imports to avoid build issues
+    const { db } = await import('@/server/db');
+    const { auth, clerkClient } = await import('@clerk/nextjs/server');
+    const { notFound, redirect } = await import('next/navigation');
+    
     const { userId } = await auth()
     if (!userId) {
         throw new Error('User not found')

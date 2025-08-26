@@ -4,11 +4,15 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 
 // Access your API key as an environment variable (see our Getting Started tutorial)
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY!) : null;
+const model = genAI?.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 
 export const getEmbeddings = async (text: string) => {
+    if (!genAI) {
+        throw new Error('Gemini API key not configured');
+    }
+    
     // For embeddings, use the Text Embeddings model
     const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
 
@@ -23,6 +27,10 @@ export const getEmbeddings = async (text: string) => {
 
 
 export const getSummary = async (doc: Awaited<ReturnType<typeof loadGithubRepo>>[number]) => {
+    if (!model) {
+        throw new Error('Gemini API key not configured');
+    }
+    
     console.log("getting summary for", doc.metadata.source);
     const code = doc.pageContent.slice(0, 10000); // Limit to 10000 characters
     const response = await model.generateContent([
@@ -40,6 +48,10 @@ ${code}
 }
 
 export const aiSummariseCommit = async (diff: string) => {
+    if (!model) {
+        throw new Error('Gemini API key not configured');
+    }
+    
     const response = await model.generateContent([
         `You are an expert programmer, and you are trying to summarize a git diff.
 Reminders about the git diff format:

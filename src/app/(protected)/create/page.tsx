@@ -10,6 +10,8 @@ import { AlertTriangle, ArrowRight, FileText, Github, Info, Key } from 'lucide-r
 import useRefetch from '@/hooks/use-refetch';
 import { createCheckoutSession } from '@/lib/stripe';
 
+export const dynamic = 'force-dynamic';
+
 
 type FormInput = {
     repoUrl: string

@@ -15,9 +15,16 @@ const firebaseConfig = {
     measurementId: "G-LST0W25197"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const storage = getStorage(app);
+// Initialize Firebase only when not in build mode
+let app: any = null;
+let storage: any = null;
+
+if (process.env.SKIP_ENV_VALIDATION !== 'true') {
+    app = initializeApp(firebaseConfig);
+    storage = getStorage(app);
+}
+
+export { storage };
 
 // Note: Ensure your Firebase Storage Rules allow writes from the client.
 // For development you can set:

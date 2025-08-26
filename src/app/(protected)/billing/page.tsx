@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { creditsToDollars } from '@/constants'
 import { createCheckoutSession } from '@/lib/stripe'
+
+export const dynamic = 'force-dynamic';
 import { api } from '@/trpc/react'
 import { Info } from 'lucide-react'
 import React from 'react'

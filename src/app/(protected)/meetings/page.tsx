@@ -3,6 +3,8 @@ import useProject from '@/hooks/use-project'
 import React from 'react'
 import MeetingCard from '../dashboard/meeting-card'
 import { api } from '@/trpc/react'
+
+export const dynamic = 'force-dynamic';
 import Link from 'next/link'
 import DeleteMeetingButton from './delete-meeting-button'
 import { Badge } from '@/components/ui/badge'

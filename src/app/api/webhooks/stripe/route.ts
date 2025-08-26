@@ -4,11 +4,18 @@ import { db } from "@/server/db";
 import Stripe from "stripe";
 import axios from "axios";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-    apiVersion: "2024-10-28.acacia",
-});
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+    apiVersion: "2024-12-18.acacia",
+}) : null;
 
 export async function POST(req: Request) {
+    if (!stripe) {
+        return new NextResponse("Stripe not configured", { status: 500 });
+    }
+    
     const body = await req.text();
     const signature = (await headers()).get("Stripe-Signature") as string;
     let event: Stripe.Event;

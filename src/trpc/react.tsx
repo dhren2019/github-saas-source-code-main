@@ -37,6 +37,33 @@ export type RouterInputs = inferRouterInputs<AppRouter>;
 export type RouterOutputs = inferRouterOutputs<AppRouter>;
 
 export function TRPCReactProvider(props: { children: React.ReactNode }) {
+  // During build, provide a minimal context to prevent errors
+  if (process.env.SKIP_ENV_VALIDATION === "true") {
+    // Create a minimal QueryClient for build time
+    const buildTimeQueryClient = createQueryClient();
+    
+    // Create a minimal tRPC client that won't make real requests
+    const [buildTimeTrpcClient] = useState(() =>
+      api.createClient({
+        links: [
+          unstable_httpBatchStreamLink({
+            transformer: SuperJSON,
+            url: "/api/trpc", // This won't be called during build
+            headers: () => new Headers(),
+          }),
+        ],
+      })
+    );
+
+    return (
+      <QueryClientProvider client={buildTimeQueryClient}>
+        <api.Provider client={buildTimeTrpcClient} queryClient={buildTimeQueryClient}>
+          {props.children}
+        </api.Provider>
+      </QueryClientProvider>
+    );
+  }
+
   const queryClient = getQueryClient();
 
   const [trpcClient] = useState(() =>

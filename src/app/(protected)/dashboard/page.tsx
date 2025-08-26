@@ -3,6 +3,8 @@ import useProject from '@/hooks/use-project'
 import { ExternalLink, Github } from 'lucide-react'
 import Link from 'next/link'
 import React from 'react'
+
+export const dynamic = 'force-dynamic';
 import AskQuestionCard from './ask-question-card'
 import CommitLog from './commit-log'
 import MeetingCard from './meeting-card'

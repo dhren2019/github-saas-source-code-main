@@ -1,6 +1,8 @@
 import React from 'react'
 import MeetingDetails from './meeting-details'
 
+export const dynamic = 'force-dynamic';
+
 type Props = {
     params: Promise<{ meetingId: string }>
 }

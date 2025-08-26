@@ -1,11 +1,15 @@
 import { OpenAI } from 'openai'
 import { loadGithubRepo } from './github-loader'
 
-export const openAI = new OpenAI({
+export const openAI = process.env.OPENAI_API_KEY ? new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
-})
+}) : null;
 
 export const getSummary = async (doc: Awaited<ReturnType<typeof loadGithubRepo>>[number]) => {
+    if (!openAI) {
+        throw new Error('OpenAI not configured');
+    }
+    
     console.log("getting summary for", doc.metadata.source);
     const code = doc.pageContent.slice(0, 10000); // Limit to 10000 characters
 
@@ -33,6 +37,10 @@ Give a summary no more than 100 words of the code above`,
 }
 
 export const aiSummariseCommit = async (diff: string) => {
+    if (!openAI) {
+        throw new Error('OpenAI not configured');
+    }
+    
     const response = await openAI.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -80,6 +88,10 @@ It is given only as an example of appropriate comments.`,
 
 
 export const getEmbeddings = async (text: string) => {
+    if (!openAI) {
+        throw new Error('OpenAI not configured');
+    }
+    
     const payload = text.replaceAll("\n", " ");
     const response = await openAI.embeddings.create({
         model: "text-embedding-ada-002",
