@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/sidebar"
 import { UserButton } from "@clerk/nextjs"
 
-import { Bot, Calendar, ChevronDown, CreditCard, File, FolderTree, Home, Inbox, LayoutDashboard, Plus, Presentation, Search, Settings } from "lucide-react"
+import { Bot, Calendar, ChevronDown, CreditCard, File, FolderTree, Home, Inbox, LayoutDashboard, Plus, Presentation, Search, Settings, AlertTriangle } from "lucide-react"
 import Logo from "./logo"
 import { cn } from "@/lib/utils"
 import { usePathname, useRouter } from "next/navigation"
@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import useProject from "@/hooks/use-project"
 import { Skeleton } from "@/components/ui/skeleton"
+import { api } from "@/trpc/react"
 
 const items = [
     {
@@ -53,6 +54,10 @@ export function AppSidebar() {
     const { projects, projectId, setProjectId, isLoading } = useProject()
     const pathname = usePathname()
     const { open } = useSidebar()
+    const { data: credits } = api.project.getMyCredits.useQuery()
+    
+    const isLowCredits = credits !== undefined && credits < 10
+    
     return (
         <Sidebar collapsible="icon" variant="floating">
             <SidebarHeader>
@@ -131,7 +136,55 @@ export function AppSidebar() {
                     </>
                 )}
             </SidebarContent>
-
+            
+            <SidebarFooter className="p-4">
+                {open && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-slate-700">Credits</span>
+                            <span className={cn("text-sm font-semibold", {
+                                "text-red-600": isLowCredits,
+                                "text-slate-900": !isLowCredits
+                            })}>
+                                {credits ?? "..."}
+                            </span>
+                        </div>
+                        
+                        {isLowCredits && (
+                            <>
+                                <div className="flex items-start gap-2 text-xs text-red-600">
+                                    <AlertTriangle className="size-3 mt-0.5 flex-shrink-0" />
+                                    <span>Your credits are running low, buy more</span>
+                                </div>
+                                <Link href="/billing">
+                                    <Button size="sm" variant="default" className="w-full text-xs">
+                                        Buy credits
+                                    </Button>
+                                </Link>
+                            </>
+                        )}
+                        
+                        {!isLowCredits && credits !== undefined && (
+                            <Link href="/billing">
+                                <Button size="sm" variant="outline" className="w-full text-xs">
+                                    Manage credits
+                                </Button>
+                            </Link>
+                        )}
+                    </div>
+                )}
+                
+                {!open && (
+                    <div className="flex justify-center">
+                        <div className={cn("size-8 rounded-md border flex items-center justify-center text-xs font-semibold", {
+                            "bg-red-50 border-red-200 text-red-600": isLowCredits,
+                            "bg-slate-50 border-slate-200 text-slate-700": !isLowCredits
+                        })}>
+                            {credits ?? "..."}
+                        </div>
+                    </div>
+                )}
+            </SidebarFooter>
         </Sidebar>
     )
 }
