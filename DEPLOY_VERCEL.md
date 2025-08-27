@@ -87,3 +87,9 @@ Antes de commitear, asegúrate de no incluir la carpeta `.next/` ni otros artefa
  - No incluyas secretos en el repo.
  - Si quieres que configure `vercel.json` para reglas o rutas específicas, lo puedo añadir, pero no debe contener secretos.
 
+Nota sobre `dotenv` y `next.config.js`
+
+- Este proyecto importa `dotenv/config` desde `next.config.js` para cargar variables del entorno temprano (antes de que `src/env.js` valide `process.env`).
+- Por eso `dotenv` debe estar presente durante la fase de build. En CI (Vercel) esto significa que `dotenv` debe estar en `dependencies` (no solo devDependencies) o que el entorno proporcione las variables necesarias a través de Settings -> Environment Variables.
+- Aun con `dotenv` presente, asegúrate de definir `DATABASE_URL` en Vercel porque Prisma ejecuta `prisma generate` en `postinstall`.
+
