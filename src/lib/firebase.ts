@@ -4,20 +4,25 @@ import { initializeApp } from "firebase/app";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
+// Your web app's Firebase configuration should come from environment variables.
+// Do NOT commit real keys to the repo. Use the `.env.example` as a template.
 const firebaseConfig = {
-    apiKey: "AIzaSyDDoVl4tgC1xBQlcvoOuv_vmDhYWQD7nQw",
-    authDomain: "github-saas-d6499.firebaseapp.com",
-    projectId: "github-saas-d6499",
-    storageBucket: "github-saas-d6499.firebasestorage.app",
-    messagingSenderId: "1003676191648",
-    appId: "1:1003676191648:web:126201a61101dfd191b2c5",
-    measurementId: "G-LST0W25197"
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const storage = getStorage(app);
+// Initialize Firebase only when a key is present to avoid build-time crashes.
+let appInstance: ReturnType<typeof initializeApp> | undefined = undefined;
+if (firebaseConfig.apiKey) {
+    appInstance = initializeApp(firebaseConfig as any);
+}
+
+export const storage = appInstance ? getStorage(appInstance) : undefined;
 
 // Note: Ensure your Firebase Storage Rules allow writes from the client.
 // For development you can set:

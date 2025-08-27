@@ -45,43 +45,16 @@ This project utilizes the following technologies:
 
 ### **Configure Environment Variables**
 
-Create a `.env` file in the root of the project and configure your database and other necessary variables:
+Create a `.env` file in the root of the project and configure your database and other necessary variables.
 
-```env
-# When adding additional environment variables, the schema in "/src/env.js"
-# should be updated accordingly.
+Do NOT commit secrets. Copy `.env.example` to `.env` and fill values.
 
-# Prisma
-# https://www.prisma.io/docs/reference/database-reference/connection-urls#env
-DATABASE_URL="postgresql://neondb_owner:3SjmZIw9BsgW@ep-round-sound-a5o2e0bs.us-east-2.aws.neon.tech/neondb?sslmode=require"
-
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_cmVsYXhpbmctd2VyZXdvbGYtNDAuY2xlcmsuYWNjb3VudHMuZGV2JA
-CLERK_SECRET_KEY=sk_test_lnmqXtRputjypEqogJKcoc4vFPUhkdkXgPQIA2ZMZP
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-
-OPENAI_API_KEY=''
-
-NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL=/sync-user
-
-GEMINI_API_KEY='AIzaSyAZBRyQTljYcycRzA98Z96ZGIB_OFOorYc'
-
-ASSEMBLYAI_API_KEY='63bdb55c965041cab0e94a3d3c61c6f6'
-
-NEXT_PUBLIC_URL='http://localhost:3000'
-
-STRIPE_SECRET_KEY='sk_test_51QJAVfIE5WYA8UpfLyyrT8skjKun03nN6eWLzNPLZl2zoj4OPCDNLVvxu6w4EzTOYCDPmBl3URgfuSGPfSLYdlvn00VybLf0cr'  
-STRIPE_PUBLISHABLE_KEY='pk_test_51QJAVfIE5WYA8UpfEZJ4abiZILglHdyqaEgyYgosmq3UQ3FPC9aTBM0OyHLeYYsxTJjtuOVaJwnMnmRjj9ZkD01300l6083BKz'
-STRIPE_WEBHOOK_SECRET='whsec_2b357712e46e9cdecbddb77f6f0a6371de31abea214359a9494e729cda0c3d66'
+```powershell
+copy .env.example .env
+# then edit .env and add real secrets
 ```
 
-In addition, update the authentication key for GitHub in `src/lib/github.ts` and `github-loader`:
-
-```typescript
-const octokit = new Octokit({
-    auth: ''
-});
-```
+In addition, update the authentication key for GitHub in `src/lib/github.ts` and `github-loader` by setting the appropriate environment variable or filling the Octokit auth when running locally.
 
 ## Prisma Commands with Bun
 
