@@ -1,0 +1,120 @@
+# Quick MVP: Deploy from App using GitHub Actions (fastest solution)
+
+This document explains a simple, fast and secure approach to let your users trigger deployments of their repositories from your app, similar to a lightweight version of Dokploy/Vercel. The goal is to avoid building and maintaining runners and instead orchestrate remote workflows using GitHub Actions.
+
+## Why GitHub Actions dispatch?
+- No runners to manage: GitHub executes the build & deploy.
+- Fast to implement: only need an endpoint that calls `workflow_dispatch`.
+- Logs & status available via GitHub API.
+- Flexible: the repo controls build steps (you provide a recommended workflow).
+
+## High-level flow (MVP)
+1. User connects their GitHub repo to your app (OAuth or manual owner/repo input).
+2. Your backend calls GitHub Actions `createWorkflowDispatch` for a workflow placed in the user's repo (e.g. `.github/workflows/deploy.yml`).
+3. The repo workflow runs the build and deploy steps (to Vercel/Render/Fly/etc.).
+4. Your app can poll the Actions API to show status/logs.
+
+## Requirements
+- A GitHub token with `repo` and `workflow` scopes (obtain via OAuth or instruct the user to provide a personal access token).
+- The target repo must include a workflow with `workflow_dispatch` event (provide example workflow below).
+
+## Example backend endpoint (Next.js)
+```ts
+import { Octokit } from "octokit";
+
+export default async function handler(req, res) {
+  const { owner, repo, ref = 'main', workflow_id = 'deploy.yml', inputs } = req.body;
+  const token = process.env.GITHUB_TOKEN; // or a per-user token stored securely
+  const octokit = new Octokit({ auth: token });
+  await octokit.actions.createWorkflowDispatch({ owner, repo, workflow_id, ref, inputs });
+  res.status(202).json({ ok: true });
+}
+```
+
+## Minimal workflow (example `.github/workflows/deploy.yml`)
+```yaml
+name: Deploy from app
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        required: false
+        default: "production"
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install & Build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Deploy to provider
+        run: |
+          # call provider CLI/API, e.g. vercel --prod, render deploy, etc.
+          echo "Deploy step"
+```
+
+## Subdomains for user deployments (assigning a subdomain under your temporary domain)
+For an experience like Vercel/Netlify where each deployment receives a subdomain under your own temporary domain (e.g. `myapp.deploys.example.com`), the MVP options are:
+
+1) Wildcard DNS + DNS automation (recommended MVP)
+- Create a wildcard DNS entry for a subdomain namespace you control, e.g. `*.deploys.example.com`, pointing to a stable target:
+  - If you run a reverse proxy (Nginx/Caddy/Traefik) or a load balancer: point `*.deploys.example.com` to its IP(s) (A records).
+  - If you rely on a hosting provider that exposes an endpoint per deploy (e.g. `user-project.vercel.app`), you'll create CNAME records per deployment that point `unique.deploys.example.com` -> `user-project.vercel.app`.
+- Workflow post-deploy: after the provider finishes a deploy and exposes the final target hostname, call your DNS provider API (Cloudflare/Route53/etc.) to create a CNAME record for the chosen subdomain (e.g. `project-abc-123.deploys.example.com`) pointing to the provider's target. Use TLS via the DNS/CDN provider (Cloudflare will provision certs automatically for the wildcard or the specific host).
+
+Advantages: simple to implement, no need to reconfigure global DNS per deploy (wildcard already exists), only per-deploy CNAME creation is required.
+
+2) Use the hosting provider's custom domain API
+- Many providers (Vercel, Netlify, Render) allow programmatic attaching of custom domains to a project via their API. The worklow can call that provider API to add `project-xyz.deploys.example.com` as a custom domain for the deployment, and the provider will usually guide DNS verification or accept CNAME pointing to a provider-managed host.
+- This is convenient but requires integrating with the provider API and possibly verification steps — still doable in the workflow.
+
+3) Run your own routing layer (reverse proxy / edge) — more work
+- Deploy builds to provider instances or storage, then register the deploy's upstream in your proxy (via API) and route `project.deploys.example.com` to the upstream. This gives full control (including custom fallback logic) but requires running/maintaining the proxy and TLS.
+
+### Naming & uniqueness
+- Use a deterministic but collision-resistant name: `project-{projectId}-{short-commit}` or `project-{projectId}-{timestamp}`.
+- Optionally allow users to choose a stable custom subdomain (with uniqueness checks) or fallback to autogenerated names.
+
+### Example: create CNAME via Cloudflare API (MVP step executed from workflow or backend)
+```bash
+curl -X POST "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"type":"CNAME","name":"PROJECT_SUBDOMAIN","content":"PROVIDER_TARGET","ttl":1,"proxied":false}'
+```
+Replace `PROJECT_SUBDOMAIN` with `project-abc.deploys.example.com` and `PROVIDER_TARGET` with the host the provider exposes for the deployment (e.g. `user-repo.vercel.app`).
+
+### TLS / certificates
+- If you use Cloudflare in front, Cloudflare will handle TLS for your `deploys.example.com` names automatically.
+- If you rely on provider-managed TLS (when using provider custom domains), the provider will issue certs for the domain once DNS is verified.
+
+### Cleanup & quota
+- Remove DNS records for old/expired deploys to avoid hitting API quotas and keeping DNS tidy.
+- Consider soft-expiration and automatic cleanup jobs.
+
+### Security & ownership
+- Verify the deploy action and ensure only authorized users can create subdomains for projects they own.
+- Prevent subdomain squatting by reserving patterns and enforcing uniqueness rules.
+
+## Showing build status & logs
+- Use `octokit.actions.listWorkflowRuns` to find the latest run and `octokit.actions.getWorkflowRun` for status.
+- Use `octokit.actions.downloadWorkflowRunLogs` to download logs.
+
+## Security notes
+- Do not store plaintext user tokens unencrypted. Use a secret storage (KMS/Vault) and rotate tokens.
+- Prefer GitHub App for production (fine-grained permissions).
+
+## Next steps / improvements
+- Allow per-project provider configuration (Vercel team, Render service id).
+- Stream logs in real-time (websockets) by polling the Actions API.
+- Provide sample workflows for popular providers.
+
+---
+This approach gets you a deploy feature in days, not months. If you want, I can scaffold the backend endpoint, workflow example, and a simple UI button in the dashboard that triggers the dispatch and shows run status.
