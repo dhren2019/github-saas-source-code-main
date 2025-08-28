@@ -7,6 +7,10 @@ import { createTRPCContext } from "@/server/api/trpc";
 
 export const maxDuration = 300;
 
+// Ensure this API route runs in the Node.js runtime so server-only modules (Prisma, child_process, fs, etc.)
+// can be imported and used by routers like /api/routers/deploy.ts.
+export const runtime = "nodejs";
+
 /**
  * This wraps the `createTRPCContext` helper and provides the required context for the tRPC API when
  * handling a HTTP request (e.g. when you make requests from Client Components).

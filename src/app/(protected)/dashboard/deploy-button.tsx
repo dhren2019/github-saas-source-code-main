@@ -23,8 +23,86 @@ import {
   ExternalLink,
   Copy,
   Eye,
-  Trash2
+  Trash2,
+  Globe,
+  AlertCircle
 } from "lucide-react";
+
+// Component to check server status
+const ServerStatusBadge = ({ url }: { url: string | null }) => {
+  const [status, setStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+
+  // Use tRPC to check server status
+  const { data: statusData, isLoading } = api.deploy.checkServerStatus.useQuery(
+    { url: url! },
+    {
+      enabled: !!url,
+      refetchInterval: 30000, // Check every 30 seconds
+      retry: false,
+    }
+  );
+
+  useEffect(() => {
+    if (!url) {
+      setStatus('offline');
+      return;
+    }
+    
+    if (isLoading) {
+      setStatus('checking');
+    } else if (statusData) {
+      setStatus(statusData.status === 'online' ? 'online' : 'offline');
+      setLastChecked(new Date(statusData.checkedAt));
+    } else {
+      setStatus('offline');
+      setLastChecked(new Date());
+    }
+  }, [url, isLoading, statusData]);
+
+  if (!url) {
+    return (
+      <Badge variant="secondary" className="text-xs">
+        <AlertCircle className="h-3 w-3 mr-1" />
+        Sin URL
+      </Badge>
+    );
+  }
+
+  const statusConfig = {
+    checking: {
+      color: "bg-yellow-500 text-white",
+      icon: <RefreshCw className="h-3 w-3 mr-1 animate-spin" />,
+      text: "Verificando..."
+    },
+    online: {
+      color: "bg-green-500 text-white",
+      icon: <Globe className="h-3 w-3 mr-1" />,
+      text: "Online"
+    },
+    offline: {
+      color: "bg-red-500 text-white",
+      icon: <XCircle className="h-3 w-3 mr-1" />,
+      text: "Offline"
+    }
+  };
+
+  const config = statusConfig[status];
+
+  return (
+    <div className="flex items-center gap-2">
+      <Badge className={`text-xs ${config.color}`}>
+        {config.icon}
+        {config.text}
+      </Badge>
+      {lastChecked && (
+        <span className="text-xs text-muted-foreground">
+          {lastChecked.toLocaleTimeString()}
+        </span>
+      )}
+    </div>
+  );
+};
 
 const DeployButton = () => {
   const { project } = useProject();
@@ -61,17 +139,43 @@ const DeployButton = () => {
   // Queries
   const { data: deployments, refetch: refetchDeployments } = api.deploy.getProjectDeployments.useQuery(
     { projectId: project?.id || "" },
-    { enabled: !!project?.id, refetchInterval: 5000 }
+    {
+      enabled: !!project?.id,
+      // Only poll when there are active/in-progress deployments to reduce CPU and browser slowdowns.
+      refetchInterval: (data) => {
+        if (!data) return false;
+        if (!Array.isArray(data)) return false;
+        const hasActive = data.some((d: any) => ["PENDING", "BUILDING", "DEPLOYING"].includes(d.status));
+        return hasActive ? 10000 : false; // poll every 10s only when there's work to do
+      },
+      refetchOnWindowFocus: false,
+      staleTime: 10000,
+    }
   );
 
   const { data: selectedDeploymentData } = api.deploy.getDeployment.useQuery(
     { deploymentId: selectedDeployment || "" },
-    { enabled: !!selectedDeployment, refetchInterval: 3000 }
+    {
+      enabled: !!selectedDeployment,
+      // Poll the selected deployment more frequently while it's building, otherwise stop polling.
+      refetchInterval: (query) => {
+        if (!query.state.data) return false;
+        return ["PENDING", "BUILDING", "DEPLOYING"].includes(query.state.data.status) ? 5000 : false;
+      },
+      refetchOnWindowFocus: false,
+      staleTime: 5000,
+    }
   );
 
   const { data: deploymentLogs } = api.deploy.getDeploymentLogs.useQuery(
     { deploymentId: selectedDeployment || "" },
-    { enabled: !!selectedDeployment }
+    { enabled: !!selectedDeployment, refetchOnWindowFocus: false }
+  );
+
+  // Fetch branches from GitHub so the user can choose which branch to deploy
+  const { data: branches, isLoading: branchesLoading, error: branchesError } = api.deploy.getRepoBranches.useQuery(
+    { projectId: project?.id || "" },
+    { enabled: !!project?.id }
   );
 
   const handleDeploy = () => {
@@ -166,12 +270,28 @@ const DeployButton = () => {
                     <Label htmlFor="branch">Branch</Label>
                     <div className="flex items-center gap-2">
                       <GitBranch className="h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="branch"
-                        value={branch}
-                        onChange={(e) => setBranch(e.target.value)}
-                        placeholder="main"
-                      />
+                      {branchesLoading ? (
+                        <span className="text-muted-foreground">Cargando ramas...</span>
+                      ) : branchesError ? (
+                        <span className="text-red-500">Error al cargar ramas</span>
+                      ) : (
+                        <Select value={branch} onValueChange={(value) => setBranch(value)}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {branches && branches.length > 0 ? (
+                              branches.map((branch) => (
+                                <SelectItem key={branch} value={branch}>
+                                  {branch}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="main">main</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                   </div>
 
@@ -297,7 +417,7 @@ const DeployButton = () => {
                   <ScrollArea className="h-[400px]">
                     {deployments && deployments.length > 0 ? (
                       <div className="space-y-2">
-                        {deployments.map((deployment) => (
+                        {deployments.map((deployment: any) => (
                           <div
                             key={deployment.id}
                             className="border rounded-lg p-3 hover:bg-muted/50 cursor-pointer"
@@ -348,6 +468,12 @@ const DeployButton = () => {
                                 )}
                               </div>
                             </div>
+                            {/* Server Status Badge */}
+                            {deployment.status === "READY" && (
+                              <div className="mt-2">
+                                <ServerStatusBadge url={deployment.deployUrl} />
+                              </div>
+                            )}
                             <div className="flex items-center justify-between mt-2 text-sm text-muted-foreground">
                               <span>{deployment.branch}</span>
                               <span>{new Date(deployment.createdAt).toLocaleString()}</span>
