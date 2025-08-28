@@ -2,6 +2,13 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { Octokit } from "octokit";
 import { env } from "@/env";
+import { exec } from "child_process";
+import { promisify } from "util";
+import path from "path";
+import fs from "fs/promises";
+import os from "os";
+
+const execAsync = promisify(exec);
 
 export const deployRouter = createTRPCRouter({
   // Crear un nuevo deploy
@@ -10,7 +17,8 @@ export const deployRouter = createTRPCRouter({
       projectId: z.string(),
       branch: z.string().default("main"),
       envVars: z.record(z.string()).optional(),
-      deploymentType: z.enum(["preview", "production"]).default("preview")
+      deploymentType: z.enum(["preview", "production"]).default("preview"),
+      provider: z.enum(["vercel", "netlify"]).default("vercel")
     }))
     .mutation(async ({ ctx, input }) => {
       // Verificar que el usuario tenga acceso al proyecto
@@ -58,43 +66,35 @@ export const deployRouter = createTRPCRouter({
           envVars: input.envVars || {},
           githubOwner: owner,
           githubRepo: repo,
+          provider: input.provider,
         },
       });
 
-      // Disparar GitHub Action para deploy
-      try {
-        const octokit = new Octokit({
-          auth: env.GITHUB_TOKEN || process.env.GITHUB_APP_TOKEN,
-        });
-
-        await octokit.rest.actions.createWorkflowDispatch({
-          owner,
-          repo,
-          workflow_id: "deploy.yml",
-          ref: input.branch,
-          inputs: {
-            deploymentId: deployment.id,
-            subdomain,
-            envVars: JSON.stringify(input.envVars || {}),
-            deploymentType: input.deploymentType.toUpperCase(),
-            callbackUrl: `${env.NEXT_PUBLIC_URL || "http://localhost:3000"}/api/deploy/callback`,
-          },
-        });
-
-        return {
-          deploymentId: deployment.id,
-          subdomain: `${subdomain}.deploys.dionysus.dev`,
-          status: "PENDING",
-        };
-      } catch (error) {
-        // Marcar deploy como fallido si no se puede disparar
-        await ctx.db.deployment.update({
-          where: { id: deployment.id },
-          data: { status: "FAILED", errorMessage: String(error) },
-        });
-        
-        throw new Error("Error al iniciar el deploy: " + String(error));
+      // Ejecutar deploy según el provider seleccionado
+      if (input.provider === "vercel") {
+        deployWithVercel(deployment.id, project.githubUrl, input.branch, input.envVars || {}, subdomain)
+          .catch(async (error) => {
+            await ctx.db.deployment.update({
+              where: { id: deployment.id },
+              data: { status: "FAILED", errorMessage: error.message },
+            });
+          });
+      } else if (input.provider === "netlify") {
+        deployWithNetlify(deployment.id, project.githubUrl, input.branch, input.envVars || {}, subdomain)
+          .catch(async (error) => {
+            await ctx.db.deployment.update({
+              where: { id: deployment.id },
+              data: { status: "FAILED", errorMessage: error.message },
+            });
+          });
       }
+
+      return {
+        deploymentId: deployment.id,
+        subdomain: `${subdomain}.${input.provider === "vercel" ? "vercel.app" : "netlify.app"}`,
+        status: "PENDING",
+        provider: input.provider,
+      };
     }),
 
   // Obtener estado de un deploy
@@ -257,3 +257,194 @@ export const deployRouter = createTRPCRouter({
       return { success: true };
     }),
 });
+
+// Función para deploy con Vercel CLI
+async function deployWithVercel(
+  deploymentId: string,
+  repoUrl: string,
+  branch: string,
+  envVars: Record<string, string>,
+  subdomain: string
+) {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "deploy-"));
+  
+  try {
+    await updateDeploymentStatus(deploymentId, "BUILDING", "Clonando repositorio...");
+    
+    // Clonar repositorio
+    await execAsync(`git clone --depth 1 --branch ${branch} ${repoUrl} ${tmpDir}`);
+    
+    // Verificar package.json
+    const packageJsonPath = path.join(tmpDir, "package.json");
+    try {
+      await fs.access(packageJsonPath);
+    } catch {
+      throw new Error("No se encontró package.json en el repositorio");
+    }
+
+    await updateDeploymentStatus(deploymentId, "BUILDING", "Instalando dependencias...");
+    
+    // Instalar dependencias
+    await execAsync("npm ci --legacy-peer-deps", { cwd: tmpDir });
+
+    // Configurar variables de entorno
+    if (Object.keys(envVars).length > 0) {
+      const envFile = Object.entries(envVars)
+        .map(([key, value]) => `${key}="${value}"`)
+        .join('\n');
+      await fs.writeFile(path.join(tmpDir, ".env.production"), envFile);
+    }
+
+    await updateDeploymentStatus(deploymentId, "DEPLOYING", "Desplegando en Vercel...");
+    
+    const vercelToken = env.VERCEL_TOKEN || process.env.VERCEL_TOKEN;
+    if (!vercelToken) {
+      throw new Error("VERCEL_TOKEN no configurado");
+    }
+
+    const deployCommand = [
+      "npx vercel",
+      "--confirm",
+      `--token "${vercelToken}"`,
+      "--prod",
+      `--name "${subdomain}"`,
+    ].join(" ");
+
+    const { stdout } = await execAsync(deployCommand, { 
+      cwd: tmpDir,
+      env: { ...process.env, VERCEL_TOKEN: vercelToken }
+    });
+
+    // Extraer URL del output
+    const urlMatch = stdout.match(/https:\/\/[^\s]+/);
+    const deployUrl = urlMatch ? urlMatch[0] : null;
+
+    if (!deployUrl) {
+      throw new Error("No se pudo obtener la URL del deployment");
+    }
+
+    await updateDeploymentStatus(deploymentId, "READY", "Deploy completado exitosamente", deployUrl);
+
+  } catch (error: any) {
+    await updateDeploymentStatus(deploymentId, "FAILED", `Error: ${error.message}`);
+    throw error;
+  } finally {
+    // Limpiar directorio temporal
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// Función para deploy con Netlify CLI
+async function deployWithNetlify(
+  deploymentId: string,
+  repoUrl: string,
+  branch: string,
+  envVars: Record<string, string>,
+  subdomain: string
+) {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "deploy-"));
+  
+  try {
+    await updateDeploymentStatus(deploymentId, "BUILDING", "Clonando repositorio...");
+    
+    // Clonar repositorio
+    await execAsync(`git clone --depth 1 --branch ${branch} ${repoUrl} ${tmpDir}`);
+    
+    // Verificar package.json
+    const packageJsonPath = path.join(tmpDir, "package.json");
+    try {
+      await fs.access(packageJsonPath);
+    } catch {
+      throw new Error("No se encontró package.json en el repositorio");
+    }
+
+    await updateDeploymentStatus(deploymentId, "BUILDING", "Instalando dependencias...");
+    
+    // Instalar dependencias
+    await execAsync("npm ci --legacy-peer-deps", { cwd: tmpDir });
+
+    // Build del proyecto
+    try {
+      await execAsync("npm run build", { cwd: tmpDir });
+    } catch (buildError) {
+      // Intentar con next build si falla npm run build
+      await execAsync("npx next build", { cwd: tmpDir });
+    }
+
+    await updateDeploymentStatus(deploymentId, "DEPLOYING", "Desplegando en Netlify...");
+    
+    const netlifyToken = env.NETLIFY_TOKEN || process.env.NETLIFY_TOKEN;
+    if (!netlifyToken) {
+      throw new Error("NETLIFY_TOKEN no configurado");
+    }
+
+    // Determinar el directorio de build
+    let buildDir = "dist";
+    try {
+      await fs.access(path.join(tmpDir, ".next"));
+      buildDir = ".next";
+    } catch {
+      try {
+        await fs.access(path.join(tmpDir, "build"));
+        buildDir = "build";
+      } catch {
+        // Usar dist por defecto
+      }
+    }
+
+    const deployCommand = [
+      "npx netlify deploy",
+      "--prod",
+      `--dir=${buildDir}`,
+      `--auth=${netlifyToken}`,
+      `--site=${subdomain}`,
+    ].join(" ");
+
+    const { stdout } = await execAsync(deployCommand, { 
+      cwd: tmpDir,
+      env: { ...process.env, NETLIFY_AUTH_TOKEN: netlifyToken }
+    });
+
+    // Extraer URL del output
+    const urlMatch = stdout.match(/https:\/\/[^\s]+\.netlify\.app/);
+    const deployUrl = urlMatch ? urlMatch[0] : null;
+
+    if (!deployUrl) {
+      throw new Error("No se pudo obtener la URL del deployment");
+    }
+
+    await updateDeploymentStatus(deploymentId, "READY", "Deploy completado exitosamente", deployUrl);
+
+  } catch (error: any) {
+    await updateDeploymentStatus(deploymentId, "FAILED", `Error: ${error.message}`);
+    throw error;
+  } finally {
+    // Limpiar directorio temporal
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// Función helper para actualizar estado del deployment
+async function updateDeploymentStatus(
+  deploymentId: string,
+  status: "PENDING" | "BUILDING" | "DEPLOYING" | "READY" | "FAILED" | "CANCELLED",
+  logs: string,
+  deployUrl?: string
+) {
+  const { db } = await import("@/server/db");
+  
+  const updateData: any = {
+    status,
+    logs,
+    updatedAt: new Date(),
+  };
+
+  if (deployUrl) updateData.deployUrl = deployUrl;
+  if (status === "BUILDING") updateData.buildStartedAt = new Date();
+  if (["READY", "FAILED", "CANCELLED"].includes(status)) updateData.finishedAt = new Date();
+
+  await db.deployment.update({
+    where: { id: deploymentId },
+    data: updateData,
+  });
+}

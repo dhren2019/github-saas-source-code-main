@@ -184,6 +184,7 @@ model Deployment {
     
     status DeploymentStatus @default(PENDING)
     deploymentType DeploymentType @default(PREVIEW)
+    provider DeploymentProvider @default(VERCEL)
     
     githubOwner String
     githubRepo  String
@@ -215,4 +216,10 @@ enum DeploymentStatus {
 enum DeploymentType {
     PREVIEW
     PRODUCTION
+}
+
+enum DeploymentProvider {
+    VERCEL
+    NETLIFY
+    GITHUB_ACTIONS
 }

@@ -31,6 +31,7 @@ const DeployButton = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [branch, setBranch] = useState("main");
   const [deploymentType, setDeploymentType] = useState<"preview" | "production">("preview");
+  const [provider, setProvider] = useState<"vercel" | "netlify">("vercel");
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
   const [envVarInput, setEnvVarInput] = useState("");
   const [selectedDeployment, setSelectedDeployment] = useState<string | null>(null);
@@ -83,6 +84,7 @@ const DeployButton = () => {
       projectId: project.id,
       branch,
       deploymentType,
+      provider,
       envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
     });
   };
@@ -182,6 +184,29 @@ const DeployButton = () => {
                       <SelectContent>
                         <SelectItem value="preview">Preview</SelectItem>
                         <SelectItem value="production">Production</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="provider">Provider de Deploy</Label>
+                    <Select value={provider} onValueChange={(value: "vercel" | "netlify") => setProvider(value)}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vercel">
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-black rounded"></div>
+                            Vercel
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="netlify">
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 bg-teal-500 rounded"></div>
+                            Netlify
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

@@ -14,6 +14,8 @@ export const env = createEnv({
     GITHUB_TOKEN: z.string().optional(),
     CLOUDFLARE_ZONE_ID: z.string().optional(),
     CLOUDFLARE_API_TOKEN: z.string().optional(),
+    VERCEL_TOKEN: z.string().optional(),
+    NETLIFY_TOKEN: z.string().optional(),
   },
 
   /**
@@ -35,6 +37,8 @@ export const env = createEnv({
     GITHUB_TOKEN: process.env.GITHUB_TOKEN,
     CLOUDFLARE_ZONE_ID: process.env.CLOUDFLARE_ZONE_ID,
     CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
+    VERCEL_TOKEN: process.env.VERCEL_TOKEN,
+    NETLIFY_TOKEN: process.env.NETLIFY_TOKEN,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**
