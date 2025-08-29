@@ -35,7 +35,7 @@ export default function CommitLog() {
                                 alt=""
                                 className="relative mt-3 h-8 w-8 flex-none rounded-full bg-gray-50"
                             />
-                            <div className="flex-auto rounded-md bg-white p-3 ring-1 ring-inset ring-gray-200">
+                            <div className="flex-auto rounded-md bg-card p-3 ring-1 ring-inset ring-border">
                                 <div className="flex justify-between gap-x-4">
                                     <Link
                                         target="_blank"

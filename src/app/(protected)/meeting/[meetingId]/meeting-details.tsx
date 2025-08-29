@@ -17,7 +17,7 @@ const MeetingDetails = ({ meetingId }: Props) => {
             <div className="p-8">
                 <div className="mx-auto flex max-w-2xl items-center justify-between gap-x-8 border-b pb-6 lg:mx-0 lg:max-w-none">
                     <div className="flex items-center gap-x-6">
-                        <div className="rounded-full border bg-white p-3">
+                        <div className="rounded-full border bg-card p-3">
                             <Presentation className="h-7 w-7 " />
                         </div>
                         <h1>

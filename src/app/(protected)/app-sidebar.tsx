@@ -103,7 +103,7 @@ export function AppSidebar() {
                                             'cursor-pointer': true,
                                         })}>
                                             <div className="">
-                                                <div className={cn("rounded-sm border size-6 flex items-center justify-center text-sm bg-white text-primary", {
+                                                <div className={cn("rounded-sm border size-6 flex items-center justify-center text-sm bg-card text-primary", {
                                                     'bg-primary text-white': projectId === project.id,
                                                 })}>
                                                     {project.name[0]}
