@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/sidebar"
 import { UserButton } from "@clerk/nextjs"
 
-import { Bot, Calendar, ChevronDown, CreditCard, File, FolderTree, Home, Inbox, LayoutDashboard, Plus, Presentation, Search, Settings, AlertTriangle } from "lucide-react"
+import { Bot, Calendar, ChevronDown, CreditCard, File, FolderTree, Home, Inbox, LayoutDashboard, Plus, Presentation, Search, Settings, AlertTriangle, GitBranch } from "lucide-react"
 import Logo from "./logo"
 import { cn } from "@/lib/utils"
 import { usePathname, useRouter } from "next/navigation"
@@ -31,6 +31,11 @@ const items = [
         title: "Dashboard",
         url: "/dashboard",
         icon: LayoutDashboard,
+    },
+    {
+        title: "Project Diagram",
+        url: "/project-diagram",
+        icon: GitBranch,
     },
     {
         title: "Q&A",
