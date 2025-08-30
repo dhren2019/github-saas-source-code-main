@@ -169,12 +169,21 @@ export async function GET(request: NextRequest) {
 
     const getFileType = (filePath: string): string => {
       const p = filePath.toLowerCase();
-      if (p.includes('/api/')) return 'api';
-      if (p.includes('/components/') || p.includes('/component')) return 'component';
-      if (p.includes('/pages/') || p.includes('/app/') || p.endsWith('.page.tsx')) return 'page';
-      if (p.includes('/lib/') || p.includes('/utils/')) return 'utility';
-      if (p.includes('/hooks/')) return 'hook';
-      if (p.includes('/server/')) return 'server';
+      // split path into segments to handle both 'src/app/...' and 'app/...' and repo sources
+      const parts = p.split('/').filter(Boolean);
+      // check common folders first
+      if (parts.includes('api') || p.includes('/api/')) return 'api';
+      if (parts.includes('components') || parts.includes('component')) return 'component';
+      // detect pages: routes under app/ or pages/ or files named page.tsx
+      if (
+        parts.includes('pages') ||
+        parts.includes('app') ||
+        p.endsWith('/page.tsx') ||
+        p.endsWith('page.tsx')
+      ) return 'page';
+      if (parts.includes('lib') || parts.includes('utils')) return 'utility';
+      if (parts.includes('hooks')) return 'hook';
+      if (parts.includes('server')) return 'server';
       return 'other';
     };
 
