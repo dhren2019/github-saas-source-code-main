@@ -10,7 +10,7 @@ const TransactionHistory = () => {
         <div>
             <h1 className='text-lg font-semibold'>Transaction History</h1>
             {stripeTransactions?.map((transaction) => (
-                <div key={transaction.id} className="flex items-center justify-between p-4 my-2 bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+                <div key={transaction.id} className="flex items-center justify-between p-4 my-2 bg-card rounded-lg shadow hover:shadow-md transition-shadow">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-green-100 rounded-full">
                             <CreditCard className='size-5 text-green-600' />

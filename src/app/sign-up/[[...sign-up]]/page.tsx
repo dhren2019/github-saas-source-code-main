@@ -6,7 +6,7 @@ export default function Page() {
       <div className="w-full max-w-[1200px] h-[min(88vh,900px)] rounded-[12px] overflow-hidden shadow-lg grid lg:grid-cols-2 gap-0">
 
         {/* Left - white panel with Clerk SignUp */}
-        <div className="bg-white flex flex-col p-6 sm:p-8">
+  <div className="bg-card flex flex-col p-6 sm:p-8">
           <div className="flex-1 flex items-center justify-center">
             <div className="w-full max-w-md">
               <SignUp

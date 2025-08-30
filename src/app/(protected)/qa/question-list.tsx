@@ -38,7 +38,7 @@ const QuestionList = () => {
         {questions?.map((question, idx) => (
           <React.Fragment key={question.id}>
             <SheetTrigger onClick={() => setQuestionIdx(idx)} >
-              <div className="flex items-center gap-4 bg-white rounded-lg p-4 shadow border">
+              <div className="flex items-center gap-4 bg-card rounded-lg p-4 shadow border">
                 <Image src={question.user.imageUrl ?? '/default-avatar.png'} alt="Avatar" width={30} height={30} className="rounded-full" />
 
                 <div className="text-left flex flex-col">

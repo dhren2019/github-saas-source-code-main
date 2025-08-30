@@ -2,6 +2,7 @@
 import { api } from '@/trpc/react';
 import { useRouter } from 'next/navigation';
 import React, { useReducer, useRef } from 'react'
+import useProject from '@/hooks/use-project'
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,8 +23,8 @@ const CreateProjectPage = () => {
     const linkRepo = api.project.create.useMutation();
     const checkCredits = api.project.checkCredits.useMutation()
     const refetch = useRefetch()
-
     const router = useRouter()
+    const { setProjectId } = useProject()
     const onSubmit = async (data: FormInput) => {
         if (!!!checkCredits.data) {
             checkCredits.mutate({
@@ -40,7 +41,15 @@ const CreateProjectPage = () => {
                 name: data.projcetName,
                 githubToken: data.githubToken,
             }, {
-                onSuccess: () => {
+                onSuccess: (createdProject) => {
+                    // ensure dashboard has the current project id so commits and other project-scoped
+                    // queries return results immediately after creation
+                    try {
+                        if (createdProject?.id) setProjectId(createdProject.id)
+                    } catch (e) {
+                        console.warn('Failed to set project id in local state', e)
+                    }
+
                     toast.success("Project created successfully");
                     router.push(`/dashboard`)
                     refetch()

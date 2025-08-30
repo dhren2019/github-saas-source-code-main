@@ -73,7 +73,7 @@ const MeetingsPage = () => {
                             <Link
                                 aria-disabled={meeting.status === "PROCESSING"}
                                 href={`/meeting/${meeting.id}`}
-                                className={cn("hidden rounded-md bg-white px-2.5 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:block", meeting.status === "PROCESSING" && "opacity-50 pointer-events-none cursor-not-allowed")}
+                                className={cn("hidden rounded-md bg-card px-2.5 py-1.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-border hover:bg-muted/50 sm:block", meeting.status === "PROCESSING" && "opacity-50 pointer-events-none cursor-not-allowed")}
                             >
                                 View meeting
                             </Link>

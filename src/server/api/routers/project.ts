@@ -48,7 +48,7 @@ export const projectRouter = createTRPCRouter({
         return createdProject;
       });
       await indexGithubRepo(project.id, input.githubUrl, input.githubToken);
-      await pollRepo(project.id)
+      await pollRepo(project.id, input.githubToken)
       await ctx.db.user.update({ where: { id: ctx.user.userId! }, data: { credits: { decrement: fileCount } } })
       return project;
     }),
@@ -64,11 +64,29 @@ export const projectRouter = createTRPCRouter({
     });
   }),
   getCommits: protectedProcedure.input(z.object({ projectId: z.string() })).query(async ({ ctx, input }) => {
-    pollRepo(input.projectId).then((commits) => {
-      console.log(`polled ${commits.count} commits`)
+    // Get the user's GitHub token for this project (if stored)
+    const userProject = await ctx.db.userToProject.findFirst({
+      where: {
+        userId: ctx.user.userId!,
+        projectId: input.projectId,
+      },
+      include: {
+        project: true,
+      },
+    });
+
+    // For existing projects, we don't have the user's token stored, so we'll use the server token
+    const token = process.env.GITHUB_TOKEN;
+    
+    pollRepo(input.projectId, token).then((commits) => {
+      console.log(`polled ${commits.count || 0} commits`)
     }).catch(console.error)
+    
     return await ctx.db.commit.findMany({
       where: { projectId: input.projectId },
+      orderBy: {
+        commitDate: 'desc'
+      }
     });
   }),
   getAllMeetings: protectedProcedure.input(z.object({ projectId: z.string() })).query(async ({ ctx, input }) => {

@@ -1,0 +1,141 @@
+name: Deploy Project to Provider
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploymentId:
+        required: true
+        description: 'ID del deployment en la base de datos'
+      subdomain:
+        required: true
+        description: 'Subdominio único para este deploy'
+      envVars:
+        required: false
+        description: 'Variables de entorno (JSON string)'
+        default: '{}'
+      deploymentType:
+        required: false
+        description: 'Tipo de deployment'
+        default: 'preview'
+      callbackUrl:
+        required: true
+        description: 'URL para enviar updates del deploy'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Notify build started
+        run: |
+          curl -X POST "${{ inputs.callbackUrl }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "deploymentId": "${{ inputs.deploymentId }}",
+              "status": "BUILDING",
+              "workflowRunId": "${{ github.run_id }}",
+              "workflowRunUrl": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "commitHash": "${{ github.sha }}"
+            }'
+            
+      - name: Parse environment variables
+        id: parse-env
+        run: |
+          echo "Parsing environment variables..."
+          ENV_VARS='${{ inputs.envVars }}'
+          if [ "$ENV_VARS" != "{}" ] && [ "$ENV_VARS" != "" ]; then
+            echo "$ENV_VARS" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' >> $GITHUB_ENV
+          fi
+          
+      - name: Install dependencies
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci --legacy-peer-deps
+          elif [ -f "yarn.lock" ]; then
+            yarn install --frozen-lockfile
+          elif [ -f "pnpm-lock.yaml" ]; then
+            pnpm install --frozen-lockfile
+          else
+            npm install --legacy-peer-deps
+          fi
+          
+      - name: Build project
+        run: |
+          # Verificar si hay script de build personalizado
+          if npm run | grep -q "build:deploy"; then
+            npm run build:deploy
+          elif npm run | grep -q "build"; then
+            npm run build
+          else
+            echo "No build script found, trying common build commands..."
+            if [ -f "next.config.js" ] || [ -f "next.config.ts" ]; then
+              npx next build
+            elif [ -f "vite.config.js" ] || [ -f "vite.config.ts" ]; then
+              npx vite build
+            elif [ -f "webpack.config.js" ]; then
+              npx webpack --mode production
+            else
+              echo "Unknown project type, build may fail"
+              exit 1
+            fi
+          fi
+          
+      - name: Deploy to Vercel
+        id: deploy-vercel
+        run: |
+          # Instalar Vercel CLI
+          npm install -g vercel
+          
+          # Configurar Vercel token
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "Error: VERCEL_TOKEN secret not configured"
+            exit 1
+          fi
+          
+          # Deploy a Vercel con nombre personalizado
+          echo "Deploying to Vercel..."
+          DEPLOY_OUTPUT=$(vercel --token "${{ secrets.VERCEL_TOKEN }}" --yes --env NODE_ENV=production 2>&1)
+          DEPLOY_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[a-zA-Z0-9.-]*\.vercel\.app[^ ]*' | head -1)
+          
+          if [ -z "$DEPLOY_URL" ]; then
+            echo "Error: No se pudo obtener la URL de deployment"
+            echo "Output completo:"
+            echo "$DEPLOY_OUTPUT"
+            exit 1
+          fi
+          
+          echo "DEPLOY_URL=$DEPLOY_URL" >> $GITHUB_OUTPUT
+          echo "Deployment successful: $DEPLOY_URL"
+          
+      - name: Notify deployment success
+        if: success()
+        run: |
+          curl -X POST "${{ inputs.callbackUrl }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "deploymentId": "${{ inputs.deploymentId }}",
+              "status": "READY",
+              "deployUrl": "${{ steps.deploy-vercel.outputs.DEPLOY_URL }}",
+              "logs": "Build and deployment completed successfully"
+            }'
+            
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          curl -X POST "${{ inputs.callbackUrl }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "deploymentId": "${{ inputs.deploymentId }}",
+              "status": "FAILED",
+              "errorMessage": "Build or deployment failed. Check workflow logs for details.",
+              "logs": "Build failed - check GitHub Actions logs for details"
+            }'

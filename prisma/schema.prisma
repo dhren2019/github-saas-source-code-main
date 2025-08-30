@@ -29,6 +29,7 @@ model User {
     userToProjects     UserToProject[]
     meetings           Meeting[]
     stripeTransactions StripeTransaction[]
+    deployments        Deployment[]
 }
 
 model UserToProject {
@@ -58,6 +59,7 @@ model Project {
     deletedAt            DateTime?
     userToProjects       UserToProject[]
     sourceCodeEmbeddings SourceCodeEmbedding[]
+    deployments          Deployment[]
 }
 
 model SourceCodeEmbedding {
@@ -164,4 +166,60 @@ model StripeTransaction {
 
     customerId String
     user       User   @relation(fields: [userId], references: [id])
+}
+
+model Deployment {
+    id        String   @id @default(cuid())
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    
+    projectId String
+    project   Project @relation(fields: [projectId], references: [id])
+    
+    userId String
+    user   User   @relation(fields: [userId], references: [id])
+    
+    subdomain String @unique
+    branch    String @default("main")
+    
+    status DeploymentStatus @default(PENDING)
+    deploymentType DeploymentType @default(PREVIEW)
+    provider DeploymentProvider @default(VERCEL)
+    
+    githubOwner String
+    githubRepo  String
+    commitHash  String?
+    
+    envVars Json?
+    logs    String? @db.Text
+    
+    buildStartedAt DateTime?
+    finishedAt     DateTime?
+    
+    deployUrl   String?
+    errorMessage String? @db.Text
+    
+    // GitHub Actions workflow run info
+    workflowRunId String?
+    workflowRunUrl String?
+}
+
+enum DeploymentStatus {
+    PENDING
+    BUILDING
+    DEPLOYING
+    READY
+    FAILED
+    CANCELLED
+}
+
+enum DeploymentType {
+    PREVIEW
+    PRODUCTION
+}
+
+enum DeploymentProvider {
+    VERCEL
+    NETLIFY
+    GITHUB_ACTIONS
 }

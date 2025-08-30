@@ -100,7 +100,7 @@ const MeetingCard = () => {
         <>
             <Card
                 {...getRootProps()}
-                className="col-span-2 flex flex-col items-center justify-center rounded-lg border bg-white p-10"
+                className="col-span-2 flex flex-col items-center justify-center rounded-lg border bg-card p-10"
             >
                 {!isUploading && (
                     <>

@@ -9,7 +9,7 @@ export default function Page() {
         <div className="hidden lg:block h-full bg-[url('/robot.svg')] bg-cover bg-bottom bg-no-repeat m-0 p-0 rounded-none" aria-hidden="true" />
 
         {/* Right - panel blanco con SignIn */}
-        <div className="bg-white flex flex-col p-6 sm:p-8">
+  <div className="bg-card flex flex-col p-6 sm:p-8">
           <div className="flex-1 flex items-center justify-center">
             <div className="w-full max-w-md">
               <SignIn
