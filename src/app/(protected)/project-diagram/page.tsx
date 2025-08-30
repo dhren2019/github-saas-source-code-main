@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   ReactFlow,
   MiniMap,
@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import useProject from "@/hooks/use-project";
 import { api } from "@/trpc/react";
 
@@ -36,11 +37,11 @@ const getNodeColor = (type: string) => {
   }
 };
 
-function applyDagreLayout(nodes: Node[], edges: Edge[]) {
+function applyDagreLayout(nodes: Node[], edges: Edge[], rankdir: 'TB' | 'LR' = 'TB') {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ 
-    rankdir: "TB", 
+    rankdir: rankdir, 
     ranker: "network-simplex", 
     ranksep: 60, 
     edgesep: 20,
@@ -89,22 +90,54 @@ export default function ProjectDiagramPage() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [stats, setStats] = useState<{ nodes: number; edges: number } | null>(null);
 
-  // Use current project as default
+  // Orientation: TB = top->bottom (vertical), LR = left->right (horizontal)
+  const [orientation, setOrientation] = useState<'TB' | 'LR'>('TB');
+
+  // React Flow instance for programmatic zoom / fit
+  const [rfInstance, setRfInstance] = useState<any | null>(null);
+
+  // Filter UI
+  const fileTypes = [
+    { type: 'page', label: 'Pages', color: getNodeColor('page') },
+    { type: 'api', label: 'API', color: getNodeColor('api') },
+    { type: 'component', label: 'Components', color: getNodeColor('component') },
+    { type: 'hook', label: 'Hooks', color: getNodeColor('hook') },
+    { type: 'utility', label: 'Utils', color: getNodeColor('utility') },
+    { type: 'server', label: 'Server', color: getNodeColor('server') },
+    { type: 'other', label: 'Other', color: getNodeColor('other') },
+  ];
+
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => new Set(fileTypes.map(f => f.type)));
+  const [showMore, setShowMore] = useState(false);
+
+  // Keep local selectedProjectId in sync with the global projectId
   useEffect(() => {
-    if (projectId && !selectedProjectId) {
+    if (projectId && projectId !== selectedProjectId) {
       setSelectedProjectId(projectId);
     }
-  }, [projectId, selectedProjectId]);
+    // if there is no projectId globally, clear local selection
+    if (!projectId) {
+      setSelectedProjectId(null);
+    }
+  }, [projectId]);
+
+  // Close the expanded 'Más' panel when switching projects to avoid stale UI
+  useEffect(() => {
+    setShowMore(false);
+  }, [selectedProjectId]);
 
   const loadGraph = useCallback(async () => {
     if (!selectedProjectId) return;
     
     setLoading(true);
     setError(null);
+    setWarning(null);
     try {
       const { data }: { data: GraphData } = await axios.get(`/api/graph?projectId=${selectedProjectId}`);
+      if ((data as any).warning) setWarning((data as any).warning);
       
       const rfNodes: Node[] = data.nodes.map((n) => ({
         id: n.id,
@@ -144,17 +177,39 @@ export default function ProjectDiagramPage() {
         },
       }));
 
-      const positioned = applyDagreLayout(rfNodes, rfEdges);
+      const positioned = applyDagreLayout(rfNodes, rfEdges, orientation);
       setNodes(positioned);
       setEdges(rfEdges);
       setStats(data.total);
+
+      // after nodes are positioned, ensure view fits
+      setTimeout(() => {
+        if (rfInstance?.fitView) {
+          rfInstance.fitView({ padding: 0.1 });
+        }
+      }, 100);
+
     } catch (err: any) {
-      console.error(err);
-      setError(err?.response?.data?.error || "Failed to load graph");
+      // safer logging: prefer response.data when available, fallback to message or stringified object
+      try {
+        if (err?.response?.data) {
+          console.error('loadGraph error response.data:', err.response.data);
+        } else if (err?.message) {
+          console.error('loadGraph error message:', err.message, err);
+        } else {
+          console.error('loadGraph error', err);
+        }
+      } catch (logErr) {
+        console.error('loadGraph logging failed', logErr, err);
+      }
+
+      const serverError = (err && err.response && err.response.data && (err.response.data.error || err.response.data.message)) || err?.message || "Failed to load graph";
+      setError(serverError);
+      try { if (err?.response?.data?.warning) setWarning(err.response.data.warning); } catch (_) {}
     } finally {
       setLoading(false);
     }
-  }, [selectedProjectId]);
+  }, [selectedProjectId, orientation, rfInstance]);
 
   useEffect(() => {
     if (selectedProjectId) {
@@ -163,6 +218,38 @@ export default function ProjectDiagramPage() {
   }, [loadGraph, selectedProjectId]);
 
   const selectedProject = projects?.find(p => p.id === selectedProjectId);
+
+  // Filter nodes/edges based on selectedTypes
+  const filteredNodes = useMemo(() => {
+    return nodes.filter(n => {
+      const t = (n.data && (n.data as any).type) || n.type || 'other';
+      return selectedTypes.has(String(t));
+    });
+  }, [nodes, selectedTypes]);
+
+  const visibleIds = useMemo(() => new Set(filteredNodes.map(n => n.id)), [filteredNodes]);
+
+  const filteredEdges = useMemo(() => {
+    return edges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
+  }, [edges, visibleIds]);
+
+  const toggleType = (t: string) => {
+    setSelectedTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t); else next.add(t);
+      return next;
+    });
+  };
+
+  // Refit view when visible nodes change so diagram recenters after filtering
+  useEffect(() => {
+    if (!rfInstance) return;
+    // run on next tick to allow React Flow to update
+    const t = setTimeout(() => {
+      try { rfInstance.fitView?.({ padding: 0.1 }); } catch (e) { /* ignore */ }
+    }, 120);
+    return () => clearTimeout(t);
+  }, [filteredNodes, rfInstance]);
 
   return (
     <div className="h-screen w-full bg-slate-50 dark:bg-slate-950">
@@ -179,7 +266,28 @@ export default function ProjectDiagramPage() {
               <label className="text-sm text-slate-600 dark:text-slate-400">Project:</label>
               <Select 
                 value={selectedProjectId || ""} 
-                onValueChange={setSelectedProjectId}
+                onValueChange={(val) => {
+                  const newId = val || null;
+                  setSelectedProjectId(newId);
+                  try {
+                    // persist selection so other parts of the app update too
+                    setProjectId(val || '');
+                  } catch (e) {
+                    console.warn('Failed to persist project selection', e);
+                  }
+                  // close expanded panel when switching projects
+                  setShowMore(false);
+                  // ensure the graph reloads for the newly selected project
+                  setTimeout(() => {
+                    try {
+                      // call loadGraph if available
+                      // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                      (async () => { if (newId) await loadGraph(); })();
+                    } catch (e) {
+                      console.warn('Failed to reload graph after project change', e);
+                    }
+                  }, 80);
+                }}
               >
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Select a project" />
@@ -212,25 +320,24 @@ export default function ProjectDiagramPage() {
               </div>
             )}
             
-            {/* Legend */}
-            <Card className="p-3">
-              <div className="text-xs font-medium mb-2">File Types</div>
-              <div className="flex gap-2 flex-wrap">
-                {[
-                  { type: 'page', label: 'Pages' },
-                  { type: 'api', label: 'API' },
-                  { type: 'component', label: 'Components' },
-                  { type: 'hook', label: 'Hooks' },
-                  { type: 'utility', label: 'Utils' },
-                  { type: 'server', label: 'Server' }
-                ].map(({ type, label }) => (
-                  <div key={type} className="flex items-center gap-1">
-                    <div 
-                      className="w-3 h-3 rounded"
-                      style={{ backgroundColor: getNodeColor(type) }}
+            {/* Interactive File Types filter in header */}
+            <Card className="p-3 hidden md:block">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium">File Types</div>
+                <div className="text-xs text-slate-400">Mostrar</div>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {fileTypes.map(({ type, label, color }) => (
+                  <label key={type} className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={selectedTypes.has(type)}
+                      onChange={() => toggleType(type)}
+                      className="w-4 h-4"
                     />
-                    <span className="text-xs">{label}</span>
-                  </div>
+                    <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: color }} />
+                    <span>{label}</span>
+                  </label>
                 ))}
               </div>
             </Card>
@@ -246,12 +353,12 @@ export default function ProjectDiagramPage() {
         )}
       </div>
 
-      {/* Flow */}
-      <div style={{ height: "calc(100vh - 120px)", width: "100%" }}>
+      {/* Flow - container relative so we can overlay controls at bottom */}
+      <div style={{ height: "calc(100vh - 120px)", width: "100%" }} className="relative">
         <ReactFlowProvider>
           <ReactFlow 
-            nodes={nodes} 
-            edges={edges} 
+            nodes={filteredNodes} 
+            edges={filteredEdges} 
             fitView 
             nodesDraggable={true}
             elementsSelectable={true}
@@ -259,6 +366,7 @@ export default function ProjectDiagramPage() {
             minZoom={0.1}
             maxZoom={2}
             className="bg-slate-50 dark:bg-slate-950"
+            onInit={(instance) => setRfInstance(instance)}
           >
             <MiniMap 
               nodeStrokeColor={() => "#334155"} 
@@ -273,6 +381,74 @@ export default function ProjectDiagramPage() {
               className="dark:opacity-20"
             />
           </ReactFlow>
+
+          {/* Small circular button bottom-left that expands options upward */}
+          <div className="absolute left-4 bottom-4 z-30">
+            <button
+              onClick={() => setShowMore(v => !v)}
+              aria-label="Abrir opciones del diagrama"
+              className="w-10 h-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md shadow-md flex items-center justify-center text-xl"
+            >
+              {showMore ? '×' : '+'}
+            </button>
+
+            {showMore && (
+              <Card className="mt-2 mb-10 w-72 p-3 shadow-lg">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium">Opciones del diagrama</div>
+                    <div className="text-xs text-slate-500">{selectedProject?.name || ''}</div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => rfInstance?.zoomIn?.()}>Zoom +</Button>
+                    <Button size="sm" onClick={() => rfInstance?.zoomOut?.()}>Zoom -</Button>
+                    <Button size="sm" onClick={() => rfInstance?.fitView?.({ padding: 0.1 })}>Fit</Button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button size="sm" variant={orientation === 'TB' ? 'default' : 'outline'} onClick={() => { setOrientation('TB'); setTimeout(() => loadGraph(), 80); }}>Vertical</Button>
+                    <Button size="sm" variant={orientation === 'LR' ? 'default' : 'outline'} onClick={() => { setOrientation('LR'); setTimeout(() => loadGraph(), 80); }}>Horizontal</Button>
+                  </div>
+
+                  <div>
+                    <div className="text-sm font-medium mb-2">Filtrar tipos</div>
+                    <div className="flex flex-col gap-2 max-h-40 overflow-auto">
+                      {fileTypes.map(({ type, label, color }) => (
+                        <label key={type} className="flex items-center gap-2">
+                          <Checkbox checked={selectedTypes.has(type)} onCheckedChange={() => toggleType(type)} />
+                          <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: color }} />
+                          <span className="text-sm">{label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <Button size="sm" onClick={() => {
+                      const payload = {
+                        projectId: selectedProjectId,
+                        exportedAt: new Date().toISOString(),
+                        nodes: filteredNodes.map(n => ({ id: n.id, label: (n.data as any)?.label, type: (n.data as any)?.type, position: n.position })),
+                        edges: filteredEdges.map(e => ({ source: e.source, target: e.target }))
+                      };
+                      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${selectedProject?.name || 'diagram'}-export.json`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    }}>Exportar</Button>
+
+                    <Button size="sm" variant="ghost" onClick={() => setShowMore(false)}>Cerrar</Button>
+                  </div>
+                </div>
+              </Card>
+            )}
+          </div>
         </ReactFlowProvider>
       </div>
     </div>

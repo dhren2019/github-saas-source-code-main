@@ -20,13 +20,15 @@ const useProject = () => {
     const project = projects?.find(project => project.id === cleanedProjectId)
     const router = useRouter()
 
+    // Only redirect to /create when projects have finished loading and no project is found.
     React.useEffect(() => {
+        if (isLoading) return
         if (project) return
         const timeout = setTimeout(() => {
             router.push(`/create`)
         }, 1000)
         return () => clearTimeout(timeout)
-    }, [project])
+    }, [project, isLoading, router])
 
 
     return {
